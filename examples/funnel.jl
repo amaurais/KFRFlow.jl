@@ -9,7 +9,6 @@ using JLD2
 using NamedColors 
 using ColorSchemes 
 using CairoMakie 
-using Makie.Colors 
 using Statistics 
 
 using SteinDiscrepancy 
@@ -320,6 +319,7 @@ display(fig)
 ## 
 
 ##* Plot evolutions grouped by method type, colored by dimension 
+evolData = [EMevol, Ievol]
 
 color_theme = Theme(Axis=(titlesize=bigSize, xlabelsize=bigSize, ylabelsize=bigSize, xticklabelsize=smallSize, yticklabelsize=smallSize, ylabelfont=:bold, xlabelfont=:bold, xticklabelfont=:bold, yticklabelfont=:bold, titlefont=:bold, xgridvisible=false), Legend=(labelfont=:bold, labelsize=smallSize, margin=(10, 20, 10, 10)), palette=(color=ColorSchemes.Johnson.colors[3:-1:1],)) 
 
