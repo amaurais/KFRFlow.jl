@@ -10,15 +10,15 @@ import ForwardDiff
 export generateDataKernels, KFRFlowEuler, KFRFlowI, EKI, SVGD, KFRParams, vKFRFlow!, dKFRFlow!, vEKI!, dEKI!, EKIParams, SVGDParams, vSVGD!
 
 """
-	generateDataKernels(X; k=RationalQuadraticKernel(α=1/2), pKernels=1.0, bwSet="full")
+	generateDataKernels(X; k=RationalQuadraticKernel(α=1/2), pKernels=1.0, bwSet="full", bw=nothing)
 
 Generate kernel functions centered at a subset of the columns of the ``d × N`` matrix `X`. 
 
-`pKernels` is the fraction of the columns of `X` that will be randomly selected and used for kernel centers. `k` is a kernel on ℝᵈ available in KernelFunctions. The kernel bandwidth is set according to the median heuristic (Liu & Wang 2016). The switch `bwSet` controls whether all columns of `X` are used to compute the bandwidth (`bwSet="full"`) or just the subset used as the kernel centers. 
+`pKernels` is the fraction of the columns of `X` that will be randomly selected and used for kernel centers. `k` is a kernel on ℝᵈ available in KernelFunctions. The switch `bwSet` controls whether all columns of `X` are used to compute the bandwidth (`bwSet="full"`) or just the subset used as the kernel centers. `bw` allows setting of a manual bandwidth or specifying `nothing`, in which case the bandwidth is selected according to the median heuristic of (Liu & Wang 2016). 
 
 Returns a vector of kernel functions.
 """
-function generateDataKernels(X::Matrix; k::Kernel=RationalQuadraticKernel(α=1/2), pKernels::Real=1.0, bwSet::String="full")
+function generateDataKernels(X::Matrix; k::Kernel=RationalQuadraticKernel(α=1/2), pKernels::Real=1.0, bwSet::String="full", bw::Union{Nothing, Real}=nothing)
 
 	Nx = size(X, 2)
 	Nkernels = Int64(floor(pKernels*Nx)) 
@@ -33,21 +33,27 @@ function generateDataKernels(X::Matrix; k::Kernel=RationalQuadraticKernel(α=1/2
 	loci = [ X[:, idx] for idx in zIdx]
 	Xloci = hcat(loci...) 
 
-	
-	# Set of particles used to compute bandwidth. 
-	if bwSet == "full" # use the entire ensemble 
-		Xbw = X 
-		Nbw = Nx 
-	else # use only particles currently active as kernel loci 
-		Xbw = Xloci 
-		Nbw = Nkernels 
-	end
 
-	# median heuristic from Liu & Wang 2016
-	dMat = pairwise(Euclidean(), eachcol(Xbw); symmetric=true)
-	dists = [dMat[i,j] for i=1:Nbw for j=i+1:Nbw][:]  
-	med = median(dists) 
-	bw = 0.5*sqrt(med^2 / log(Nbw))		
+	if isnothing(bw)  
+	# Set of particles used to compute bandwidth. 
+		if bwSet == "full" # use the entire ensemble 
+			Xbw = X 
+			Nbw = Nx 
+		else # use only particles currently active as kernel loci 
+			Xbw = Xloci 
+			Nbw = Nkernels 
+		end
+
+		# median heuristic from Liu & Wang 2016
+		dMat = pairwise(Euclidean(), eachcol(Xbw); symmetric=true)
+		dists = [dMat[i,j] for i=1:Nbw for j=i+1:Nbw][:]  
+		med = median(dists) 
+		bw = 0.5*sqrt(med^2 / log(Nbw))		
+	elseif bw isa Real 
+		# let the bandwidth be 
+	else
+		error("unrecognized bw option")
+	end
 
 	# generate a kernel function at each locus 
 	features = [ x -> (k ∘ ScaleTransform(1/bw))(x, z) for z in loci ]
@@ -68,6 +74,7 @@ Apply a forward Euler discretization of KFRFlow (Maurais & Marzouk 2024) to the 
 - `pKernels::Real=1.0`: fraction of the samples to use to define kernel features on each iteration. 
 - `k::Kernel=RationalQuadraticKernel(α=1/2)` kernel function to use in the algorithm. Defaults to inverse multiquadric. 
 - `bwSet::String="full"`: switch controlling whether all samples are used to compute the bandwidth at each step (`bwSet="full"`) or just the subset used as the kernel centers.
+- `bw::Union{Nothing, Real}=nothing`: kernel bandwidth. If `nothing`, bandwidth is selected according to the median heuristic of (Liu & Wang 2016). 
 - `verbose::Bool=false`: whether to print a status update after each step. 
 - `nugget::Real=0.0`: level of inflation for Mₜ
 - `ϵ::Real=0.0`: level of stochasticity. Note that ϵ > 0 requires ∇logπ0 and ∇logπ1 to be input 
@@ -76,7 +83,7 @@ Apply a forward Euler discretization of KFRFlow (Maurais & Marzouk 2024) to the 
 
 If `savehistory` is `true`, a d×N×(number of steps) matrix containing the intermediate states of `X` during the flow and a (number of steps) vector of time waypoints is returned. If not, only a d×N matrix containing the samples at t = 1 is returned.
 """
-function KFRFlowEuler(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehistory::Bool=false, pKernels::Real=1.0, k::Kernel=RationalQuadraticKernel(α=1/2), bwSet::String="full", verbose::Bool=false, nugget::Real=0.0, ϵ::Real=0.0, ∇logπ0::Function=x->zeros(size(Xprior, 1)), ∇logπ1::Function=x->zeros(size(Xprior, 1)))
+function KFRFlowEuler(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehistory::Bool=false, pKernels::Real=1.0, k::Kernel=RationalQuadraticKernel(α=1/2), bwSet::String="full", bw::Union{Nothing, Real}=nothing, verbose::Bool=false, nugget::Real=0.0, ϵ::Real=0.0, ∇logπ0::Function=x->zeros(size(Xprior, 1)), ∇logπ1::Function=x->zeros(size(Xprior, 1)))
 
 	# dimensions 
 	Nx = size(Xprior, 1) 
@@ -95,7 +102,7 @@ function KFRFlowEuler(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehist
 	while tCurrent < 1.0 
 
 		#* generate kernel at each ensemble member  
-		features = generateDataKernels(X, pKernels=pKernels, k=k, bwSet=bwSet)  
+		features = generateDataKernels(X, pKernels=pKernels, k=k, bwSet=bwSet, bw=bw)  
 		fgrads = [x -> ForwardDiff.gradient(f, x) for f in features]
 
 		F(x) =[f(x) for f in features] 
@@ -105,7 +112,7 @@ function KFRFlowEuler(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehist
 		logRatioEvals = hcat(logratio.(eachcol(X))...)[:] # density ratio evaluations at each particle, Jx1 
 
 		meanLRE = mean(logRatioEvals)  
-		weights = (logRatioEvals .- meanLRE) # Jx1 #* this does not have a 1/J... got cancelled  
+		weights = (logRatioEvals .- meanLRE) # Jx1 
 		
 
 		# precompute gradients 
@@ -120,7 +127,6 @@ function KFRFlowEuler(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehist
 
 		for i = 1:Ne 
 			# compute the update for particle i 
-			#* updated to include stochasticity 
 			dX[:, i] =  Aarr[i]' * perturbation + ϵ*( (1 - tCurrent)*∇logπ0(X[:, i]) + tCurrent*∇logπ1(X[:, i]) ) 
 		end
 
@@ -147,6 +153,7 @@ function KFRFlowEuler(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehist
 	end
 end
 
+
 """
 	KFRParams(<keyword arguments>)
 
@@ -158,6 +165,7 @@ Struct for holding the parameters required for using DifferentialEquations.jl to
 - `pKernels::Real=1.0`: fraction of the samples to use to define kernel features on each iteration. 
 - `k::Kernel=RationalQuadraticKernel(α=1/2)` kernel function to use in the algorithm. Defaults to inverse multiquadric. 
 - `bwSet::String="full"`: switch controlling whether all samples are used to compute the bandwidth at each step (`bwSet="full"`) or just the subset used as the kernel centers.
+- `bw::Union{Nothing, Real}=nothing`: Allows the user to set the kernel bandwidth manually by passing in a real value instead of the default `nothing`. Passing in `nothing` corresponds to selecting the bandwidth with the median rule. 
 - `verbose::Bool=false`: whether to print a status update after each step. 
 - `nugget::Real=0.0`: level of inflation for Mₜ
 - `ϵ::Real=0.0`: level of stochasticity. Note that ϵ > 0 requires ∇logπ0 and ∇logπ1 to be input 
@@ -170,6 +178,7 @@ Base.@kwdef struct KFRParams
 	pKernels::Real = 1.0 
 	k::Kernel = RationalQuadraticKernel(α=1/2)
 	bwSet::String = "full" 
+	bw::Union{Nothing, Real} = nothing
 	nugget::Real = 0.0 
 	ϵ::Real = 0.0 
 	∇logπ0::Function = x-> zeros(d)  
@@ -182,7 +191,7 @@ end
 Compute the velocity for KFRFlow in-place.  `X` is a d x N matrix containing `N` samples (samples are stored in columns), `dX` is a d x N matrix container for the velocity, `p` is an instance of `KFRParams`, and `t` is a time. 
 """
 function vKFRFlow!(dX::Matrix, X::Matrix, p::KFRParams, t::Real)
-	features = generateDataKernels(X, pKernels=p.pKernels, k=p.k, bwSet=p.bwSet)  
+	features = generateDataKernels(X, pKernels=p.pKernels, k=p.k, bwSet=p.bwSet, bw=p.bw)  
 	fgrads = [x -> ForwardDiff.gradient(f, x) for f in features]
 
 	F(x) =[f(x) for f in features] 
@@ -232,12 +241,13 @@ Apply KFRFlow-I (Maurais & Marzouk 2024) to the columns of `Xprior` according to
 - `pKernels::Real=1.0`: fraction of the samples to use to define kernel features on each iteration. 
 - `k::Kernel=RationalQuadraticKernel(α=1/2)` kernel function to use in the algorithm. Defaults to inverse multiquadric. 
 - `bwSet::String="full"`: switch controlling whether all samples are used to compute the bandwidth at each step (`bwSet="full"`) or just the subset used as the kernel centers.
+- `bw::Union{Nothing, Real}=nothing`: bandwidth for the kernels. Passing in `nothing` corresponds to using the median heuristic of (Liu & Wang 2016) to select the bandwidth. 
 - `verbose::Bool=false`: whether to print a status update after each step. 
 - `nugget::Real=0.0`: level of inflation for Mₜ.
 
 If `savehistory` is `true`, a d×N×(number of steps) matrix containing the intermediate states of `X` during the flow and a (number of steps) vector of time waypoints is returned. If not, only a d×N matrix containing the samples at t = 1 is returned.
 """
-function KFRFlowI(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehistory::Bool=false, pKernels::Real=1.0, k::Kernel=RationalQuadraticKernel(α=1/2), bwSet::String="full", verbose::Bool=false, nugget::Real=0.0 )
+function KFRFlowI(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehistory::Bool=false, pKernels::Real=1.0, k::Kernel=RationalQuadraticKernel(α=1/2), bwSet::String="full", bw::Union{Nothing, Real}=nothing, verbose::Bool=false, nugget::Real=0.0 )
 
 	# dimensions 
 	Ne = size(Xprior, 2) 
@@ -249,21 +259,16 @@ function KFRFlowI(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehistory:
 	Nsteps = Int(ceil(1/dt))
 
 	if savehistory 
-		# if old
-		# 	Xhist = Xprior 
-		# 	tArr = [0.0] 
-		#else
-			Xhist = zeros(Nx, Ne, Nsteps + 1)
-			Xhist[:, :, 1] = Xprior[:, :] 
-			tArr = zeros(Nsteps+1)  
-		#end
+		Xhist = zeros(Nx, Ne, Nsteps + 1)
+		Xhist[:, :, 1] = Xprior[:, :] 
+		tArr = zeros(Nsteps+1)  
 	end
 
 	tCurrent = 0.0 
 	logIdx = 2 
 
 	while tCurrent < 1.0 
-		features = generateDataKernels(X, pKernels=pKernels, k=k, bwSet=bwSet)
+		features = generateDataKernels(X, pKernels=pKernels, k=k, bwSet=bwSet, bw=bw)
 		fgrads = [x -> ForwardDiff.gradient(f, x) for f in features]
 	
 		# evaluate features 
@@ -294,13 +299,8 @@ function KFRFlowI(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehistory:
 		X = X + hcat( [(sopt'*Amat)[:] for Amat in Aarr]... )
 
 		if savehistory 
-			# if old 
-			# 	Xhist = cat(Xhist, X, dims=3)
-			# 	tArr = [tArr; tArr[end] + Δt] 
-			# else
-				Xhist[:, :, logIdx] = X[:, :] 
-				tArr[logIdx] = tArr[logIdx-1] + Δt 
-			#end 
+			Xhist[:, :, logIdx] = X[:, :] 
+			tArr[logIdx] = tArr[logIdx-1] + Δt 
 		end
 
 		tCurrent = tCurrent + Δt

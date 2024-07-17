@@ -31,7 +31,7 @@ logπ0(x) = -0.5*(x - μ0)'*Γ0*(x - μ0)
 π0(x) = exp(logπ0(x))
 
 # choose example 
-example = "butterfly" # "donut", "spaceships" 
+example = "spaceships" # "donut", "spaceships" 
 
 if example == "donut" 
 	G(x) = norm(x) 
@@ -45,8 +45,11 @@ if example == "donut"
 	π1(x) = π0(x)*densityRatio(x) 
 	logπ1(x) = logπ0(x) + logRatio(x)
 
-	nugget = 0.0 
-	importanceNugget = 0.0
+	nugget = 0.0  
+	importanceNugget = 1e-11
+
+	kfrKernel = MaternKernel() 
+	kfrBw = 45 
 
 	dt = 0.01
 
@@ -68,8 +71,11 @@ elseif example == "spaceships"
 
 	dt = 0.01  
 
-	nugget = 1e-11
-	importanceNugget = 0.0
+	nugget = 0.0  
+	importanceNugget = 0.0  
+
+	kfrKernel = MaternKernel() 
+	kfrBw = 30 
 
 	xmin = -3.0
 	xmax = 3.0
@@ -89,8 +95,12 @@ elseif example == "butterfly"
 
 	dt = 0.01 
 
-	nugget = 1e-8  
-	importanceNugget = 0.0 
+	# inflation levels 
+	nugget = 0.0  
+	importanceNugget = 0.0  
+
+	kfrKernel = MaternKernel() 
+	kfrBw = 15 
 
 	xmin = -3.0 
 	xmax = 3.0 
@@ -134,7 +144,7 @@ end
 ##* KFRFlow    
 Xprior = rand(πx, Ne) # initalize particles 
 tspan = (0.0, 1.0) 
-params = KFRParams(logratio=logRatio, d=Nx, nugget=nugget)
+params = KFRParams(logratio=logRatio, d=Nx, nugget=nugget, k=kfrKernel, bw=kfrBw)
 prob = ODEProblem(vKFRFlow!, Xprior, tspan, params)
 
 ## Example: solve with Euler 
@@ -149,7 +159,7 @@ tArr_Euler = solEuler.t
 plotTimeSeries(tArr_Euler, Xposterior_Euler, [length(tArr_Euler)], "KFRFlow, Euler, dt=$dt")
 
 # to plot entire series, use
-# plotTimeSeries(tArr_Euler, Xposterior_Euler, 1:length(tArr_Euler), "Euler, dt=$dt")  
+#plotTimeSeries(tArr_Euler, Xposterior_Euler, 1:length(tArr_Euler), "Euler, dt=$dt")  
 
 ## Example: solve with multistep 
 alg = AB4()  
@@ -160,18 +170,18 @@ tArr_AB = solAB.t
 plotTimeSeries(tArr_AB, Xposterior_AB, [length(tArr_AB)], "KFRFlow, AB4, dt=$dt")
 
 ## Example: use standalone implementation of Euler 
-(Xposterior_ES, tArr_ES) = KFRFlowEuler(Xprior, logRatio, savehistory=true, pKernels=1.0, dt=dt, bwSet="full", k=RationalQuadraticKernel(α=1/2), verbose=false, nugget=nugget)
+(Xposterior_ES, tArr_ES) = KFRFlowEuler(Xprior, logRatio, savehistory=true, pKernels=1.0, dt=dt, bwSet="full", k=kfrKernel, bw=kfrBw, verbose=false, nugget=nugget)
 
 plotTimeSeries(tArr_ES, Xposterior_ES, [length(tArr_ES)], "KFRFlow, Euler, dt=$dt")
 
 ##* KFRFlow-I 
-(Xposterior_I, tArr_I) = KFRFlowI(Xprior, logRatio, savehistory=true, pKernels=1.0, dt=dt, bwSet="full", k=RationalQuadraticKernel(α=1/2), verbose=false, nugget=importanceNugget)
+(Xposterior_I, tArr_I) = KFRFlowI(Xprior, logRatio, savehistory=true, pKernels=1.0, dt=dt, k=kfrKernel, bw=kfrBw, verbose=false, nugget=importanceNugget)
 
 plotTimeSeries(tArr_I, Xposterior_I, [length(tArr_I)], "KFRFlow-I, dt=$dt")
 
 ##* KFRD
 ϵ = 0.1    
-stochParams = KFRParams(d=Nx, logratio=logRatio, ϵ=ϵ, ∇logπ0=∇logπ0, ∇logπ1=∇logπ1)
+stochParams = KFRParams(d=Nx, logratio=logRatio, ϵ=ϵ, ∇logπ0=∇logπ0, ∇logπ1=∇logπ1, k=kfrKernel, bw=kfrBw)
 stochProb = SDEProblem(vKFRFlow!, dKFRFlow!, Xprior, tspan, stochParams)
 
 alg = EM() # Euler Maruyama 
