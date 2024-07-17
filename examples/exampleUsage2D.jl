@@ -213,14 +213,14 @@ plotTimeSeries(tArrEKI_EM, XposteriorEKI_EM, [length(tArrEKI_EM)], "EKI, Euler-M
 
 plotTimeSeries(tArr_EKI, Xposterior_EKI, [length(tArr_EKI)], "EKI, dt=$dt")
 
-##* SVGD 
+##* SVGD without adaptive bandwidth selection, using DifferentialEquations 
 Tstop = 50.0
 tspanSVGD = (0.0, Tstop)
 
 Nsteps = 1/dt 
 dtSVGD = Tstop/Nsteps  
 
-pSVGD = SVGDParams(∇logπ1=∇logπ1)
+pSVGD = SVGDParams(∇logπ1=∇logπ1, k=kfrKernel, bw=kfrBw)
 
 svgdProb = ODEProblem(vSVGD!, Xprior, tspanSVGD, pSVGD)
 alg = Euler() 
@@ -243,7 +243,8 @@ display(f)
 
 ## Standalone SVGD 
 
-(Xposterior_SVGD, tArr_SVGD) = SVGD(Xprior, ∇logπ1,; dt=dtSVGD, Tstop=Tstop, k=RationalQuadraticKernel(α=1/2), verbose=false, savehistory=true)
+#* SVGD with adaptive bandwidth selection, standalone implementation 
+(Xposterior_SVGD, tArr_SVGD) = SVGD(Xprior, ∇logπ1,; dt=dtSVGD, Tstop=Tstop, k=kfrKernel, verbose=false, savehistory=true, bw=nothing)
 
 f = Figure()
 ax = Axis(f[1,1], xlabel="x₁", ylabel="x₂", ygridvisible=false, xgridvisible=false, title="SVGD, dt=$dtSVGD, T=$Tstop")

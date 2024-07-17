@@ -441,12 +441,13 @@ Use Stein Variational Gradient Descent (SVGD) (Liu & Wang 2016)to sample from a 
 - `Tstop::Real=1.0`: stopping time of the iteration 
 - `k::Kernel=RationalQuadraticKernel(α=1/2)`: choice of kernel, from KernelFunctions.jl. Defaults to inverse multiquadric. 
 - `bwSet::String="full"`: switch controlling whether all samples are used to compute the bandwidth at each step (`bwSet="full"`) or just the subset used as the kernel centers. 
+- `bw::Union{Nothing, Real}=nothing`: kernel bandwidth. If `nothing`, use the median heuristic to select the bandwidth. 
 - `verbose::Bool=false`: whether to print a status update after each step. 
 - `savehistory::Bool=false`: whether to save the history of the evolution of the samples or only report the samples at t = `Tstop`.
 
 If `savehistory` is `true`, a d×N×(number of steps) matrix containing the intermediate states of the samples during the iteration and a (number of steps) vector of time waypoints is returned. If not, only a d×N matrix containing the samples at t = 1 is returned.
 """
-function SVGD(Xprior::Matrix, ∇logπ1::Function; dt::Real=0.1, Tstop::Real=1.0, k::Kernel=RationalQuadraticKernel(α=1/2), bwSet::String="full", verbose::Bool=false, savehistory::Bool=false)
+function SVGD(Xprior::Matrix, ∇logπ1::Function; dt::Real=0.1, Tstop::Real=1.0, k::Kernel=RationalQuadraticKernel(α=1/2), bwSet::String="full", bw::Union{Nothing, Real}=nothing, verbose::Bool=false, savehistory::Bool=false)
 
 	# initialize the ensemble container 
 	X = Xprior  
@@ -461,7 +462,7 @@ function SVGD(Xprior::Matrix, ∇logπ1::Function; dt::Real=0.1, Tstop::Real=1.0
 	while tCurrent < Tstop  
 
 		#* generate kernel at each ensemble member  
-		features = generateDataKernels(X, pKernels=1.0, k=k, bwSet=bwSet)  
+		features = generateDataKernels(X, pKernels=1.0, k=k, bwSet=bwSet, bw=bw)  
 		fgrads = [x -> ForwardDiff.gradient(f, x) for f in features]
 
 		Nk = length(features) 
@@ -512,19 +513,21 @@ Struct for holding the parameters required for using DifferentialEquations.jl to
 # Arguments 
 - `∇logπ1::Function`: score of the target distribution  
 - `k::Kernel=RationalQuadraticKernel(α=1/2)`: choice of kernel, from KernelFunctions.jl. Defaults to inverse multiquadric. 
+- `bw::Union{Nothing, Real}=nothing`: kernel bandwidth. If `nothing`, use the median heuristic to select the bandwidth  
 """
 Base.@kwdef struct SVGDParams 
 	∇logπ1::Function
 	k::Kernel=RationalQuadraticKernel(α=1/2) 
+	bw::Union{Nothing, Real}=nothing
 end
 
 """
 	vSVGD!(dX, X, p, t)
 
-Compute the velocity for SVGD (Iglesias et al. 2013) in-place.  `X` is a d x N matrix containing `N` samples (samples are stored in columns), `dX` is a d x N matrix container for the velocity, `p` is an instance of `SVGDParams`, and `t` is a time. 
+Compute the velocity for SVGD (Liu & Wang 2016) in-place.  `X` is a d x N matrix containing `N` samples (samples are stored in columns), `dX` is a d x N matrix container for the velocity, `p` is an instance of `SVGDParams`, and `t` is a time. 
 """
 function vSVGD!(dX::Matrix, X::Matrix, p::SVGDParams, t::Real)
-	features = generateDataKernels(X, pKernels=1.0, k=p.k, bwSet="full")  
+	features = generateDataKernels(X, pKernels=1.0, k=p.k, bwSet="full", bw=p.bw)  
 	fgrads = [x -> ForwardDiff.gradient(f, x) for f in features]
 
 	Nk = length(features) 
