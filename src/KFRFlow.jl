@@ -105,7 +105,7 @@ function KFRFlowEuler(Xprior::Matrix, logratio::Function; dt::Real=0.1, savehist
 		logRatioEvals = hcat(logratio.(eachcol(X))...)[:] # density ratio evaluations at each particle, Jx1 
 
 		meanLRE = mean(logRatioEvals)  
-		weights = (logRatioEvals .- meanLRE) # Jx1 
+		weights = (logRatioEvals .- meanLRE) # Jx1 #* this does not have a 1/J... got cancelled  
 		
 
 		# precompute gradients 
@@ -164,7 +164,7 @@ Struct for holding the parameters required for using DifferentialEquations.jl to
 - `∇logπ0::Function=x->zeros(size(Xprior, 1))` score of π₀. Note that the default value is *not* physically meaningful. 
 - `∇logπ1::Function=x->zeros(size(Xprior, 1))` score of π₁. Note that the default value is *not* physically meaningful. 
 """
-@kwdef struct KFRParams
+Base.@kwdef struct KFRParams
 	logratio::Function 
 	d::Integer  
 	pKernels::Real = 1.0 
@@ -398,7 +398,7 @@ Struct for holding the parameters required for using DifferentialEquations.jl to
 - `Γ::Matrix=Float64.(Matrix(I, size(ystar, 1), size(ystar, 1)))`: Observational covariance matrix of ϵ. Defaults to the identity.
 - `Γhalf::Matrix=Float64.(Matrix(I, size(ystar, 1), size(ystar, 1)))`: A square root of Γ. Defaults to the identity  
 """
-@kwdef struct EKIParams
+Base.@kwdef struct EKIParams
 	ystar::Vector
 	G::Function 
 	Γ::Matrix = Float64.(Matrix(I, size(ystar, 1), size(ystar, 1)))
@@ -513,7 +513,7 @@ Struct for holding the parameters required for using DifferentialEquations.jl to
 - `∇logπ1::Function`: score of the target distribution  
 - `k::Kernel=RationalQuadraticKernel(α=1/2)`: choice of kernel, from KernelFunctions.jl. Defaults to inverse multiquadric. 
 """
-@kwdef struct SVGDParams 
+Base.@kwdef struct SVGDParams 
 	∇logπ1::Function
 	k::Kernel=RationalQuadraticKernel(α=1/2) 
 end
