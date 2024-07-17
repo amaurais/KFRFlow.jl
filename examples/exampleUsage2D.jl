@@ -31,7 +31,7 @@ logπ0(x) = -0.5*(x - μ0)'*Γ0*(x - μ0)
 π0(x) = exp(logπ0(x))
 
 # choose example 
-example = "spaceships" # "donut", "spaceships" 
+example = "spaceships" # "donut", "butterfly" 
 
 if example == "donut" 
 	G(x) = norm(x) 
